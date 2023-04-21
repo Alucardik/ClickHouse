@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Server/HTTP/HTTPRequestHandler.h>
+<<<<<<< HEAD
 #include <Core/Names.h>
 #include <Common/CurrentThread.h>
 #include <Server/HTTP/HTMLForm.h>
@@ -8,6 +9,10 @@
 #include <Server/WebSocket/WebSocket.h>
 #include <Server/WebSocket/ReadBufferFromWebSocket.h>
 #include "Poco/Util/ServerApplication.h"
+=======
+#include <Poco/Net/WebSocket.h>
+
+>>>>>>> ebd6653ff5a (setup websocket server creation)
 
 
 namespace DB
