@@ -1,18 +1,16 @@
 #pragma once
 
-#include <Server/HTTP/HTTPRequestHandler.h>
-<<<<<<< HEAD
 #include <Core/Names.h>
 #include <Common/CurrentThread.h>
-#include <Server/HTTP/HTMLForm.h>
 #include <Common/setThreadName.h>
+#include <Server/HTTP/HTMLForm.h>
+#include <Server/HTTP/HTTPRequestHandler.h>
 #include <Server/WebSocket/WebSocket.h>
+#include <Server/WebSocket/WebSocketServerConnection.h>
 #include <Server/WebSocket/ReadBufferFromWebSocket.h>
-#include "Poco/Util/ServerApplication.h"
-=======
-#include <Poco/Net/WebSocket.h>
 
->>>>>>> ebd6653ff5a (setup websocket server creation)
+#include "Poco/Util/ServerApplication.h"
+#include <Poco/Net/WebSocket.h>
 
 
 namespace DB
@@ -22,7 +20,7 @@ class Session;
 class Credentials;
 class IServer;
 
-class WebSocketHandler : public HTTPRequestHandler
+class HTTPWebSocketHandler : public HTTPRequestHandler
 {
 private:
     IServer & server;
@@ -38,7 +36,6 @@ private:
     // The request_credential instance may outlive a single request/response loop.
     // This happens only when the authentication mechanism requires more than a single request/response exchange (e.g., SPNEGO).
     std::unique_ptr<Credentials> request_credentials;
-
 
     bool authenticateUser(
         HTTPServerRequest & request,
@@ -56,7 +53,7 @@ private:
         );
 
 public:
-    WebSocketHandler(IServer & server_);
+    HTTPWebSocketHandler(IServer & server_);
     void handleRequest(HTTPServerRequest & request, HTTPServerResponse & response) override;
 
     virtual bool customizeQueryParam(ContextMutablePtr context, const std::string & key, const std::string & value) = 0;
@@ -67,7 +64,7 @@ public:
 };
 
 
-class DynamicQueryWebSocketHandler : public WebSocketHandler
+class DynamicQueryWebSocketHandler : public HTTPWebSocketHandler
 {
 private:
     std::string param_name;
