@@ -508,6 +508,11 @@
 
 <script type="text/javascript">
 
+    // Holds WebSocket connection in case of using ws:// or wss:// scheme
+    let webSocket = null;
+    let lastReceivedWebSocketStatistics = null;
+    let webSocketMessageBuffer = '';
+
     /// Incremental request number. When response is received,
     /// if its request number does not equal to the current request number, response will be ignored.
     /// This is to avoid race conditions.
@@ -532,14 +537,126 @@
         document.getElementById('user').value = user_from_url;
     }
 
+    function newWebSocketRequest(posted_request_num, query) {
+        request = {
+            'type': 'request',
+            'data': query,
+            'query_id': posted_request_num,
+        };
+
+        return JSON.stringify(request);
+    }
+
+    function processWebSocketResponse(query, data) {
+        const message = JSON.parse(data);
+        console.log('RECEIVED MSG', message, data);
+        const payload = message['data'];
+        let parsed_payload = null;
+        let isLastMessage = false;
+
+        switch (message['type']) {
+            case 'response':
+                isLastMessage = message['last_message'];
+                parsed_payload = payload;
+                console.log('message type', typeof message['last_message']);
+                break;
+            case 'metrics':
+                try {
+                    // TODO: render stats on each update
+                    lastReceivedWebSocketStatistics = JSON.parse(payload);
+                } catch (e) {}
+                return;
+            case 'error':
+                alert(`received error from server: ${payload}`)
+                return;
+            default:
+                alert(`unsupported message type: ${message['type']}`);
+                return;
+        }
+
+        if (posted_request_num !== message['query_id']) {
+            return;
+        }
+
+        if (!isLastMessage) {
+            return;
+        }
+
+        renderResponse(0, this.response, true);
+        /// The query is saved in browser history (in state JSON object)
+        /// as well as in URL fragment identifier.
+        if (query !== previous_query) {
+            const state = {
+                query: query,
+                status: this.status,
+                response: webSocketMessageBuffer.length > 100000 ? null : webSocketMessageBuffer,  /// Lower than the browser's limit.
+                isWebSocketRequest: true,
+            };
+            const title = "ClickHouse Query: " + query;
+
+            let history_url = window.location.pathname + '?user=' + encodeURIComponent(user);
+            if (server_address !== location.origin) {
+                /// Save server's address in URL if it's not identical to the address of the play UI.
+                history_url += '&url=' + encodeURIComponent(server_address);
+            }
+            history_url += '#' + window.btoa(query);
+
+            if (previous_query !== '') {
+                history.replaceState(state, title, history_url);
+            }
+
+            history.pushState(state, title, history_url);
+            document.title = title;
+            previous_query = query;
+        }
+
+        webSocketMessageBuffer = '';
+    }
+
+    function webSocketPostImpl(server_address, posted_request_num, query) {
+        // if connection is not yet established or is closed already - open it once again
+        if (!webSocket || webSocket.readyState === 3) {
+            try {
+                webSocket = new WebSocket(server_address);
+                webSocket.onclose = (e) => {
+                    console.log(`Closing WebSocket connection: ${e.reason}`)
+                }
+
+                webSocket.onerror = (e) => {
+                    console.error(`Error in WebSocket connection: ${e}`)
+                    webSocket.close();
+                }
+
+                webSocket.onmessage = (e) => {
+                    // TODO: maybe its incorrect to pass query like this (use global var instead?)
+                    processWebSocketResponse(query, e.data);
+                }
+            } catch (e) {
+                alert('Failed to establish webSocket connection');
+                return;
+            }
+        }
+
+        webSocket.send(newWebSocketRequest(posted_request_num, query));
+    }
+
     function postImpl(posted_request_num, query)
     {
+        console.info("CALLED POST IMPL");
         const user = document.getElementById('user').value;
         const password = document.getElementById('password').value;
 
         const server_address = document.getElementById('url').value;
 
-        var url = server_address +
+        let webSocketRequest = server_address.startsWith('ws://') || server_address.startsWith('wss://')
+        if (webSocketRequest) {
+            webSocketPostImpl(server_address, posted_request_num, query)
+            return
+        }
+
+        webSocket.close();
+
+        let url = server_address +
             (server_address.indexOf('?') >= 0 ? '&' : '?') +
             /// Ask server to allow cross-domain requests.
             'add_http_cors_header=1' +
@@ -603,8 +720,14 @@
         xhr.send(query);
     }
 
-    function renderResponse(status, response) {
+    function renderResponse(status, response, isWebSocketResponse = false) {
         document.getElementById('hourglass').style.display = 'none';
+
+        if (isWebSocketResponse) {
+            response.statistics = lastReceivedWebSocketStatistics;
+            renderResult(response);
+            return;
+        }
 
         if (status === 200) {
             let json;
@@ -637,7 +760,8 @@
             clear();
             return;
         }
-        renderResponse(event.state.status, event.state.response);
+
+        renderResponse(event.state.status, event.state.response, event.state.isWebSocketRequest);
     };
 
     if (window.location.hash) {
