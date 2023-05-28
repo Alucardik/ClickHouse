@@ -22,7 +22,6 @@ void WebSocketRequestHandler::processQuery(
     std::optional<CurrentThread::QueryScope> & query_scope
 )
 {
-    // TODO: make appropriate changes to make this thing work
 //    using namespace Poco::Net;
 
 //    /// The user could specify session identifier and session timeout.
@@ -126,6 +125,7 @@ void WebSocketRequestHandler::processQuery(
     executeQuery(input, output, /* allow_into_outfile = */ false, context,
                  [&output] (const QueryResultDetails & details)
                  {
+                     std::cout << "CONTENT TYPE" << " " << details.content_type.value() << std::endl;
                      output.setQueryId(details.query_id);
                  }
                  );
